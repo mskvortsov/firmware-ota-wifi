@@ -290,11 +290,72 @@ static void ota_flash()
     ESP_ERROR_CHECK(esp_ota_set_boot_partition(part_firmware));
 }
 
+static const char* get_type_str(esp_partition_type_t type)
+{
+    switch (type) {
+        case ESP_PARTITION_TYPE_APP:  return "app";
+        case ESP_PARTITION_TYPE_DATA: return "data";
+        default: return "unknown";
+    }
+}
+
+static const char* get_subtype_str(esp_partition_type_t type, esp_partition_subtype_t subtype)
+{
+    if (type == ESP_PARTITION_TYPE_APP) {
+        switch (subtype) {
+            case ESP_PARTITION_SUBTYPE_APP_FACTORY: return "factory";
+            case ESP_PARTITION_SUBTYPE_APP_OTA_0:   return "ota_0";
+            case ESP_PARTITION_SUBTYPE_APP_OTA_1:   return "ota_1";
+            case ESP_PARTITION_SUBTYPE_APP_OTA_2:   return "ota_2";
+            case ESP_PARTITION_SUBTYPE_APP_OTA_3:   return "ota_3";
+            case ESP_PARTITION_SUBTYPE_APP_OTA_4:   return "ota_4";
+            case ESP_PARTITION_SUBTYPE_APP_OTA_5:   return "ota_5";
+            case ESP_PARTITION_SUBTYPE_APP_OTA_6:   return "ota_6";
+            case ESP_PARTITION_SUBTYPE_APP_OTA_7:   return "ota_7";
+            case ESP_PARTITION_SUBTYPE_APP_OTA_8:   return "ota_8";
+            case ESP_PARTITION_SUBTYPE_APP_OTA_9:   return "ota_9";
+            case ESP_PARTITION_SUBTYPE_APP_OTA_10:  return "ota_10";
+            case ESP_PARTITION_SUBTYPE_APP_OTA_11:  return "ota_11";
+            case ESP_PARTITION_SUBTYPE_APP_OTA_12:  return "ota_12";
+            case ESP_PARTITION_SUBTYPE_APP_OTA_13:  return "ota_13";
+            case ESP_PARTITION_SUBTYPE_APP_OTA_14:  return "ota_14";
+            case ESP_PARTITION_SUBTYPE_APP_OTA_15:  return "ota_15";
+            case ESP_PARTITION_SUBTYPE_APP_TEST:    return "test";
+            default: return "unknown";
+        }
+    } else if (type == ESP_PARTITION_TYPE_DATA) {
+        switch (subtype) {
+            case ESP_PARTITION_SUBTYPE_DATA_OTA:       return "ota";
+            case ESP_PARTITION_SUBTYPE_DATA_PHY:       return "phy";
+            case ESP_PARTITION_SUBTYPE_DATA_NVS:       return "nvs";
+            case ESP_PARTITION_SUBTYPE_DATA_COREDUMP:  return "coredump";
+            case ESP_PARTITION_SUBTYPE_DATA_NVS_KEYS:  return "nvskeys";
+            case ESP_PARTITION_SUBTYPE_DATA_EFUSE_EM:  return "efuse";
+            case ESP_PARTITION_SUBTYPE_DATA_UNDEFINED: return "undefined";
+            case ESP_PARTITION_SUBTYPE_DATA_ESPHTTPD:  return "esphttpd";
+            case ESP_PARTITION_SUBTYPE_DATA_FAT:       return "fat";
+            case ESP_PARTITION_SUBTYPE_DATA_SPIFFS:    return "spiffs";
+            case ESP_PARTITION_SUBTYPE_DATA_LITTLEFS:  return "littlefs";
+            default: return "unknown";
+        }
+    }
+
+    return "unknown";
+}
+
 void app_main()
 {
     const esp_app_desc_t *desc = esp_app_get_description();
-    printf("%s %s %s %s %s\r\n", desc->project_name, desc->version,
-        desc->idf_ver, desc->date, desc->time);
+    printf("%s %s %s %s %s\r\n", desc->project_name, desc->version, desc->idf_ver, desc->date, desc->time);
+
+    esp_partition_iterator_t part_it = esp_partition_find(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, NULL);
+    while (part_it) {
+        const esp_partition_t *part = esp_partition_get(part_it);
+        const char *type = get_type_str(part->type);
+        const char *subtype = get_subtype_str(part->type, part->subtype);
+        printf("%16s %7s %9s 0x%08x %10d %5d\r\n", part->label, type, subtype, part->address, part->size, part->erase_size);
+        part_it = esp_partition_next(part_it);
+    }
 
     nvs_init("ota-wifi");
     wifi_credentials_t config;
