@@ -114,11 +114,19 @@ static void wifi_connect(const wifi_credentials_t *config)
     }
 }
 
+
+typedef enum {
+    ESPOTA_CMD_FLASH  =   0,
+    ESPOTA_CMD_SPIFFS = 100,
+    ESPOTA_CMD_AUTH   = 200,
+} espota_cmd_t;
+
 typedef struct {
     in_port_t remote_port;
     struct sockaddr_in remote_ctrl_addr;
     size_t firmware_size;
     uint8_t firmware_md5[16];
+    espota_cmd_t cmd;
 } ota_config_t;
 
 #define OK "OK"
@@ -147,8 +155,14 @@ static void ota_parse_config(const char *buffer, ota_config_t *config)
     if (res != 4) {
         FAIL("Invalid header");
     }
-    if (command != 0) {
-        FAIL("Invalid command");
+    espota_cmd_t cmd = (espota_cmd_t)command;
+    switch (cmd) {
+        case ESPOTA_CMD_FLASH:
+        case ESPOTA_CMD_SPIFFS:
+            config->cmd = cmd;
+            break;
+        default:
+            FAIL("Invalid command");
     }
     if (remote_port > UINT16_MAX) {
         FAIL("Invalid port");
@@ -232,12 +246,23 @@ static void ota_flash()
     int sock_ctrl = ota_receive_config(3232, &config);
     INFO("Received invitation");
 
-    const esp_partition_t *part_firmware = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_0, NULL);
-    const esp_partition_t *part_ota = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, NULL);
+    const esp_partition_t *part_firmware = esp_partition_find_first(ESP_PARTITION_TYPE_APP,  ESP_PARTITION_SUBTYPE_APP_OTA_0,   NULL);
+    const esp_partition_t *part_ota      = esp_partition_find_first(ESP_PARTITION_TYPE_APP,  ESP_PARTITION_SUBTYPE_APP_OTA_1,   NULL);
+    const esp_partition_t *part_fs       = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_SPIFFS, NULL);
+    const esp_partition_t *part_target   = NULL;
+    if (config.cmd == ESPOTA_CMD_FLASH) {
+        part_target = part_firmware;
+    } else if (config.cmd == ESPOTA_CMD_SPIFFS) {
+        if (part_fs == NULL) {
+            FAIL("Failed to find filesystem parititon");
+        }
+        part_target = part_fs;
+    } else {
+        FAIL("Internal error: invalid command");
+    }
 
     INFO("Erasing flash");
-    esp_ota_handle_t ota_handle;
-    ESP_ERROR_CHECK(esp_ota_begin(part_firmware, OTA_SIZE_UNKNOWN, &ota_handle));
+    ESP_ERROR_CHECK(esp_partition_erase_range(part_target, 0, part_target->size));
     ESP_ERROR_CHECK(esp_ota_set_boot_partition(part_ota));
 
     mbedtls_md5_context md5_context;
@@ -267,19 +292,17 @@ static void ota_flash()
             FAIL("Failed to receive a chunk");
         }
         mbedtls_md5_update(&md5_context, buffer, len);
-        ESP_ERROR_CHECK(esp_ota_write(ota_handle, buffer, len));
+        ESP_ERROR_CHECK(esp_partition_write(part_target, bytes_received, buffer, len));
         if (send(sock, OK, OK_LEN, 0) != OK_LEN) {
             FAIL("Failed to confirm a chunk");
         }
         bytes_received += len;
     }
 
-    ESP_ERROR_CHECK(esp_ota_end(ota_handle));
-
     shutdown(sock, 0);
     closesocket(sock);
 
-    INFO("Firmware received");
+    INFO("Firmware written");
     unsigned char md5[16];
     mbedtls_md5_finish(&md5_context, md5);
     if (memcmp(config.firmware_md5, md5, sizeof(md5)) != 0) {
