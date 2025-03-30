@@ -1,0 +1,35 @@
+name: Main workflow
+on:
+  push:
+    paths:
+      - version.txt
+
+jobs:
+  build:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Setup Platformio
+        run: |
+          python -m pip install --upgrade pip
+          pip install -U platformio
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build
+        run: |
+          echo "VERSION=$(cat version.txt)" >> $GITHUB_ENV
+          pio run
+          cd .pio/build
+          for t in $(ls -d */); do cp $t/firmware.bin wifiota-${t%%/}.bin; done
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.VERSION }}
+          files: |
+            .pio/build/wifiota-*.bin
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

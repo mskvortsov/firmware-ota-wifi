@@ -12,7 +12,11 @@ esptool.py --port <...> write_flash 0x260000 .pio/build/<target>/firmware.bin
 ```
 After rebooting the device into OTA firmware (the main firmware has to have some way of doing that), upload a new main firmware binary over network:
 ```
-espota.py -i <device-ip-address> -f <new-main-firmware.bin>
+espota.py --ip <device-ip-address> --file <new-main-firmware.bin>
+```
+Uploading a filesystem image to a `spiffs` partition:
+```
+espota.py --ip <device-ip-address> --file <littlefs.bin> --spiffs
 ```
 
 ### Details

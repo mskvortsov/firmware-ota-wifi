@@ -1,7 +1,6 @@
 #include <string.h>
 
 #include "esp_event.h"
-#include "esp_log.h"
 #include "esp_ota_ops.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
@@ -251,6 +250,9 @@ static void ota_flash()
     const esp_partition_t *part_fs       = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_SPIFFS, NULL);
     const esp_partition_t *part_target   = NULL;
     if (config.cmd == ESPOTA_CMD_FLASH) {
+        if (part_firmware == NULL) {
+            FAIL("Failed to find main firmware parititon");
+        }
         part_target = part_firmware;
     } else if (config.cmd == ESPOTA_CMD_SPIFFS) {
         if (part_fs == NULL) {
@@ -280,7 +282,7 @@ static void ota_flash()
         sock = ota_connect_data(&config);
     } while (--connect_retries && sock < 0);
     if (sock < 0) {
-        INFO("Failed to connect to host");
+        FAIL("Failed to connect to host");
     }
     INFO("Connected to host, now flashing");
     closesocket(sock_ctrl);
@@ -366,7 +368,7 @@ static const char* get_subtype_str(esp_partition_type_t type, esp_partition_subt
     return "unknown";
 }
 
-void app_main()
+static void print_info()
 {
     const esp_app_desc_t *desc = esp_app_get_description();
     printf("%s %s %s %s %s\r\n", desc->project_name, desc->version, desc->idf_ver, desc->date, desc->time);
@@ -379,7 +381,11 @@ void app_main()
         printf("%16s %7s %9s 0x%08x %10d %5d\r\n", part->label, type, subtype, part->address, part->size, part->erase_size);
         part_it = esp_partition_next(part_it);
     }
+}
 
+void app_main()
+{
+    print_info();
     nvs_init("ota-wifi");
     wifi_credentials_t config;
     INFO("Reading NVRAM storage");
